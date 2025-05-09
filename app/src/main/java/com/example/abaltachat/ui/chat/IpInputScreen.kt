@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.abaltachat.R
+import com.example.abaltachat.utils.getLocalIpAddress
 
 @Composable
 fun IpInputScreen(
@@ -32,6 +33,10 @@ fun IpInputScreen(
             .padding(padding)
             .padding()
     ) {
+
+        val ip = getLocalIpAddress() ?: "Unknown IP"
+        Text("Server IP: $ip")
+
         TextField(
             value = ipText,
             onValueChange = { ipText = it },
