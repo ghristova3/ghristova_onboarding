@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AbaltaChat</string>
+    <string name="enter_ip_address">Enter IP Address</string>
+    <string name="connect">Connect</string>
+</resources>
