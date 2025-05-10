@@ -6,53 +6,55 @@ import com.example.abaltachat.network.TcpClient
 import com.example.abaltachat.network.TcpServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import java.io.DataOutputStream
+import java.io.IOException
 import java.net.Socket
 
 class ChatRepository(
+    private val onClientConnected: (clientAddress: String) -> Unit,
     private val onMessageReceived: (ChatMessage) -> Unit,
     private val scope: CoroutineScope
 ) {
     private var server: TcpServer? = null
-    private var clientSocket: Socket? = null
-    private var outputStream: DataOutputStream? = null
+    private var clientConnection: TcpClient? = null
 
     fun startServer() {
-        server = TcpServer(onMessageReceived)
+        server = TcpServer(onClientConnected, onMessageReceived)
         server?.start(scope)
     }
 
-    fun connectTo(ip: String) {
-        scope.launch(Dispatchers.IO) {
+    suspend fun connectTo(ip: String): Result<Unit> {
+        val async = scope.async(Dispatchers.IO) {
             try {
-                delay(500) // TODO: Refactor it. Give server time to start
-                clientSocket = Socket(ip, PORT)
-                outputStream = DataOutputStream(clientSocket!!.getOutputStream())
-                TcpClient(clientSocket!!, onMessageReceived).start(scope)
-            } catch (ex: Exception) {
-                Log.e("ChatRepository", "Connection error: ${ex.message}", ex)
+                val socket = Socket(ip, PORT)
+                clientConnection = TcpClient(socket, onMessageReceived).also {
+                    it.start(scope)
+                }
+                Result.success(Unit)
+            } catch (ex: IOException) {
+                Log.e(TAG, "$CONNECT_FAILED${ex.message}", ex)
+                Result.failure(ex)
             }
         }
+        return async.await()
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(message: String) {
         scope.launch(Dispatchers.IO) {
-            try {
-                outputStream?.writeUTF("MSG:$text")
-                outputStream?.flush()
-            } catch (ex: Exception) {
-                Log.e("ChatRepository", "Send error: ${ex.message}", ex)
-            }
+            server?.sendMessage(message) // will work only if acting as server
+            clientConnection?.sendMessage(message) // will work only if acting as client
         }
     }
 
     fun stopServer() {
         server?.stop()
+        clientConnection?.stop()
     }
 
     companion object {
+        const val TAG = "ChatRepository"
+        const val CONNECT_FAILED = "Connect failed: "
         const val PORT = 6000
     }
 }

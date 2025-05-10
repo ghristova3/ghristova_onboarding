@@ -1,5 +1,6 @@
 package com.example.abaltachat.ui.chat
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,47 +10,24 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onPickFile: () -> Unit, padding: PaddingValues) {
-    val messages by viewModel.messages.observeAsState(emptyList())
-    val isConnected by viewModel.isConnected.observeAsState(false)
+    val context = LocalContext.current
+    val messages by viewModel.messages.collectAsState()
     val scrollState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-
     var currentMessage by remember { mutableStateOf("") }
-    var ipAddress by remember { mutableStateOf("") }
-    var input by remember { mutableStateOf("") }
 
     Column(modifier = Modifier
         .fillMaxSize()
         .padding(padding)
         .padding(16.dp)) {
-
-        if (!isConnected) {
-
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                label = { Text("Enter IP address!") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = { viewModel.connectTo(input) },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("Connect")
-            }
-
-        }
 
         LazyColumn(
             modifier = Modifier
@@ -86,6 +64,11 @@ fun ChatScreen(viewModel: ChatViewModel, onPickFile: () -> Unit, padding: Paddin
     LaunchedEffect(messages.size) {
         coroutineScope.launch {
             scrollState.animateScrollToItem(0)
+        }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.toastMessage.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }

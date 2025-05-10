@@ -8,8 +8,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import com.example.abaltachat.ui.chat.ChatScreen
 import com.example.abaltachat.ui.chat.ChatViewModel
 import com.example.abaltachat.ui.chat.IpInputScreen
@@ -25,7 +25,7 @@ class ChatActivity : ComponentActivity() {
         val viewModel = ChatViewModel()
 
         setContent {
-            val isConnected by viewModel.isConnected.observeAsState(false)
+            val isConnected by viewModel.isConnected.collectAsState(false)
             AbaltaChatTheme {
                 Scaffold(
                     topBar = {
