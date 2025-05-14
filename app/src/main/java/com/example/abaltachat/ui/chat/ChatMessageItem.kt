@@ -44,7 +44,7 @@ fun ChatMessageItem(message: ChatMessage) {
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "📁 ${message.fileName} (${message.fileSize} bytes)",
+                        text = "📁 ${message.file.name} (${message.file.length()}) bytes)",
                         style = TextStyle(color = textColor)
                     )
                     if (message.transferProgress in 1..99) {

@@ -7,12 +7,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.ServerSocket
 
 class TcpServer(
     private val onClientConnected: (clientAddress: String) -> Unit,
-    private val onMessageReceived: (ChatMessage) -> Unit
+    private val onMessageReceived: (ChatMessage) -> Unit,
+    private val fileTransferProgressListener: FileTransferProgressListener
 ) {
     private var serverSocket: ServerSocket? = null
     private var running = true
@@ -30,7 +33,11 @@ class TcpServer(
                     Log.d(TAG, "$CLIENT_CONNECTED: $clientAddress")
                     onClientConnected(clientAddress)
 
-                    val tcpClient = TcpClient(socket, onMessageReceived)
+                    val tcpClient = TcpClient(
+                        socket,
+                        onMessageReceived,
+                        fileTransferProgressListener
+                    )
                     tcpClient.start(scope)
                     connectedClient = tcpClient
                 }
@@ -39,6 +46,15 @@ class TcpServer(
             }
         }
     }
+
+    fun sendFile(file: File) {
+        try {
+            connectedClient?.sendFile(file)
+        } catch (e: IOException) {
+            Log.e(TAG, "$ERROR_SENDING_FILE: ${e.message}", e)
+        }
+    }
+
 
     fun sendMessage(message: String) {
         try {
@@ -65,5 +81,7 @@ class TcpServer(
         const val SERVER_ERROR = "Server error"
         const val LISTENING_ON_PORT = "Listening on port"
         const val ERROR_CLOSING_SERVER_SOCKET = "Error closing server socket"
+        const val ERROR_SENDING_FILE = "Error sending file"
+        const val ERROR_RECEIVING_FILE = "Error receiving file"
     }
 }

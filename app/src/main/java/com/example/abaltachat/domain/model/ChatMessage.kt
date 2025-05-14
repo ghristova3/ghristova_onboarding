@@ -1,5 +1,7 @@
 package com.example.abaltachat.domain.model
 
+import java.io.File
+
 sealed class ChatMessage {
     abstract val isIncoming: Boolean
     abstract val timestamp: Long
@@ -11,9 +13,7 @@ sealed class ChatMessage {
     ) : ChatMessage()
 
     data class FileMessage(
-        val fileName: String,
-        val fileSize: Long,
-        val filePath: String? = null,
+        val file: File,
         override val isIncoming: Boolean,
         val transferProgress: Int = 0,
         override val timestamp: Long = System.currentTimeMillis()
