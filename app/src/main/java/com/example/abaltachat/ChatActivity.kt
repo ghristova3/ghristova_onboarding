@@ -1,9 +1,14 @@
 package com.example.abaltachat
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -14,15 +19,18 @@ import com.example.abaltachat.ui.chat.ChatScreen
 import com.example.abaltachat.ui.chat.ChatViewModel
 import com.example.abaltachat.ui.chat.IpInputScreen
 import com.example.abaltachat.ui.theme.AbaltaChatTheme
+import java.io.File
 
 class ChatActivity : ComponentActivity() {
+
+    private lateinit var viewModel: ChatViewModel
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val viewModel = ChatViewModel()
+        viewModel = ChatViewModel()
 
         setContent {
             val isConnected by viewModel.isConnected.collectAsState(false)
@@ -43,11 +51,62 @@ class ChatActivity : ComponentActivity() {
                         ChatScreen(
                             padding = padding,
                             viewModel = viewModel,
-                            onPickFile = { }
+                            onPickFile = { launchFilePicker() }
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun launchFilePicker() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        filePickerResultLauncher.launch(intent)
+    }
+
+    private val filePickerResultLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                result.data?.data?.let { uri ->
+                    val file = getFileFromUri(uri)
+                    file?.let { viewModel.sendFile(it) }
+                }
+            }
+        }
+
+    private fun getFileFromUri(uri: Uri): File? {
+        val fileName = getFileName(uri) ?: return null
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val tempFile = File(cacheDir, fileName)
+            tempFile.outputStream().use { outputStream ->
+                inputStream?.copyTo(outputStream)
+            }
+            tempFile
+        } catch (ex: Exception) {
+            Log.e(TAG, "Error getting file from URI: ${ex.message}", ex)
+            null
+        }
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        var name: String? = null
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1) {
+                    name = it.getString(index)
+                }
+            }
+        }
+        return name ?: uri.lastPathSegment
+    }
+
+    companion object {
+        const val TAG = "ChatActivity"
     }
 }
