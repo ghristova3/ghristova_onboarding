@@ -25,7 +25,8 @@ fun IpInputScreen(
     padding: PaddingValues,
     onConnect: (String) -> Unit
 ) {
-    var ipText by remember { mutableStateOf("") }
+    // TODO Remove hardcoded IP address
+    var ipText by remember { mutableStateOf("192.168.0.202") }
 
     Column(
         modifier = Modifier

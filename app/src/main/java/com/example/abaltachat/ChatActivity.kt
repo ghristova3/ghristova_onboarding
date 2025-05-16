@@ -3,6 +3,7 @@ package com.example.abaltachat
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -30,7 +31,13 @@ class ChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        viewModel = ChatViewModel()
+        // TODO Use Store Access framework because of Android 11+
+        val fileDir =
+            //Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/"
+            applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/"
+        viewModel = ChatViewModel(fileDir)
+
+        Log.d("Path", "Path: ${fileDir}")
 
         setContent {
             val isConnected by viewModel.isConnected.collectAsState(false)

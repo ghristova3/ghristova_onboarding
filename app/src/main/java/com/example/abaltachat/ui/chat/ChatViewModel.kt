@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
-class ChatViewModel : ViewModel() {
+class ChatViewModel(fileDir: String) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -50,6 +50,7 @@ class ChatViewModel : ViewModel() {
     }
 
     private val repository = ChatRepository(
+        path = fileDir,
         onClientConnected = { clientIp ->
             _isConnected.value = true
             addMessage(ChatMessage.TextMessage("Connected to $clientIp", isIncoming = true))
@@ -109,7 +110,7 @@ class ChatViewModel : ViewModel() {
         repository.stopServer()
     }
 
-    // TODO Use SAF because of Android 11
+    // TODO Use SAF because of Android 11+
 //    fun saveIncomingFile(outputStream: OutputStream) {
 //        viewModelScope.launch(Dispatchers.IO) {
 //            val state = _incomingFileState.value ?: return@launch

@@ -9,13 +9,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 import java.net.ServerSocket
 
 class TcpServer(
     private val onClientConnected: (clientAddress: String) -> Unit,
     private val onMessageReceived: (ChatMessage) -> Unit,
-    private val fileTransferProgressListener: FileTransferProgressListener
+    private val fileTransferProgressListener: FileTransferProgressListener,
+    private val path: String? = null,
 ) {
     private var serverSocket: ServerSocket? = null
     private var running = true
@@ -36,7 +36,8 @@ class TcpServer(
                     val tcpClient = TcpClient(
                         socket,
                         onMessageReceived,
-                        fileTransferProgressListener
+                        fileTransferProgressListener,
+                        path
                     )
                     tcpClient.start(scope)
                     connectedClient = tcpClient

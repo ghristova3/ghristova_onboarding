@@ -17,7 +17,8 @@ class ChatRepository(
     private val onClientConnected: (clientAddress: String) -> Unit,
     private val onMessageReceived: (ChatMessage) -> Unit,
     private val scope: CoroutineScope,
-    private val fileTransferProgressListener: FileTransferProgressListener
+    private val fileTransferProgressListener: FileTransferProgressListener,
+    private val path: String? = null,
 ) {
     private var server: TcpServer? = null
     private var clientConnection: TcpClient? = null
@@ -26,7 +27,8 @@ class ChatRepository(
         server = TcpServer(
             onClientConnected,
             onMessageReceived,
-            fileTransferProgressListener
+            fileTransferProgressListener,
+            path
         )
         server?.start(scope)
     }
@@ -38,7 +40,8 @@ class ChatRepository(
                 clientConnection = TcpClient(
                     socket,
                     onMessageReceived,
-                    fileTransferProgressListener
+                    fileTransferProgressListener,
+                    path
                 ).also {
                     it.start(scope)
                 }
