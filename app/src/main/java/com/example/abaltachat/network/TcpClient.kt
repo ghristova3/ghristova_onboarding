@@ -32,7 +32,7 @@ class TcpClient(
             while (true) {
                 try {
                     when (dataInput.readByte()) {
-                        MESSAGE_TYPE -> {
+                        CONTROL_MESSAGE_TYPE -> {
                             val length = dataInput.readInt()
                             val bytes = ByteArray(length)
                             dataInput.readFully(bytes)
@@ -40,7 +40,7 @@ class TcpClient(
                             handleHeader(header)
                         }
 
-                        FILE_CHUNK -> {
+                        CONTROL_FILE_CHUNK -> {
                             if (receivingFile == null) {
                                 Log.e(TAG, "Received file data without header!")
                                 continue
@@ -132,7 +132,7 @@ class TcpClient(
         val fileData = "$FILE_HEADER${file.name}:${file.length()}"
         try {
             val bytes = fileData.toByteArray()
-            dataOutput.writeByte(MESSAGE_TYPE.toInt())
+            dataOutput.writeByte(CONTROL_MESSAGE_TYPE.toInt())
             dataOutput.writeInt(bytes.size)
             dataOutput.write(bytes)
             dataOutput.flush()
@@ -146,7 +146,7 @@ class TcpClient(
     private fun sendText(message: String) {
         try {
             val data = message.toByteArray()
-            dataOutput.writeByte(MESSAGE_TYPE.toInt())
+            dataOutput.writeByte(CONTROL_MESSAGE_TYPE.toInt())
             dataOutput.writeInt(data.size)
             dataOutput.write(data)
             dataOutput.flush()
@@ -158,7 +158,7 @@ class TcpClient(
 
     private fun sendFileChunk(chunk: SocketMessage.FileChunk) {
         try {
-            dataOutput.writeByte(FILE_CHUNK.toInt())
+            dataOutput.writeByte(CONTROL_FILE_CHUNK.toInt())
             dataOutput.writeInt(chunk.data.size)
             dataOutput.write(chunk.data)
             dataOutput.flush()
@@ -183,8 +183,8 @@ class TcpClient(
     companion object {
 
         const val TAG = "TcpClient"
-        const val MESSAGE_TYPE: Byte = 'M'.code.toByte()
-        const val FILE_CHUNK: Byte = 'F'.code.toByte()
+        const val CONTROL_MESSAGE_TYPE: Byte = 'M'.code.toByte()
+        const val CONTROL_FILE_CHUNK: Byte = 'F'.code.toByte()
         const val TEXT_HEADER = "Text:"
         const val FILE_HEADER = "File:"
         // TODO Bigger file chucks? 10MB
