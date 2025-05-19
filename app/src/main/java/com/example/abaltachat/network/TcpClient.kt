@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.*
 import java.net.Socket
+import java.net.SocketException
 
 class TcpClient(
     private val socket: Socket,
@@ -52,9 +53,16 @@ class TcpClient(
                             appendToFile(chunk)
                         }
                     }
-
+                } catch (ex: EOFException) {
+                    Log.e(TAG, "EOFException error: ${ex.message}", ex)
+                    fileTransferProgressListener.onTransferError("Unknown", ex)
+                    break
                 } catch (ex: IOException) {
                     Log.e(TAG, "Receiving error: ${ex.message}", ex)
+                    fileTransferProgressListener.onTransferError("Unknown", ex)
+                    break
+                } catch (ex: SocketException) {
+                    Log.e(TAG, "SocketException error: ${ex.message}", ex)
                     fileTransferProgressListener.onTransferError("Unknown", ex)
                     break
                 }
@@ -187,6 +195,7 @@ class TcpClient(
         const val CONTROL_FILE_CHUNK: Byte = 'F'.code.toByte()
         const val TEXT_HEADER = "Text:"
         const val FILE_HEADER = "File:"
+
         // TODO Bigger file chucks? 10MB
         const val FILE_CHUNK_SIZE = 1024 * 1024
     }

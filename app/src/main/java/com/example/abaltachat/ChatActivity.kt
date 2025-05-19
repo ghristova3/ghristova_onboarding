@@ -34,7 +34,7 @@ class ChatActivity : ComponentActivity() {
         // TODO Use Store Access framework because of Android 11+
         val fileDir =
             //Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/"
-            applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + "/"
+            applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + File.separator
         viewModel = ChatViewModel(fileDir)
 
         Log.d("Path", "Path: ${fileDir}")

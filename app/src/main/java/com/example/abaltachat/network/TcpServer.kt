@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 import java.net.ServerSocket
+import java.net.SocketException
 
 class TcpServer(
     private val onClientConnected: (clientAddress: String) -> Unit,
@@ -42,8 +43,12 @@ class TcpServer(
                     tcpClient.start(scope)
                     connectedClient = tcpClient
                 }
-            } catch (e: IOException) {
-                Log.e(TAG, "$SERVER_ERROR: ${e.message}", e)
+            } catch (ex: IOException) {
+                Log.e(TAG, "$SERVER_ERROR: ${ex.message}", ex)
+                fileTransferProgressListener.onTransferError("Unknown", ex)
+            } catch (ex: SocketException) {
+                Log.e(TAG, "$SERVER_ERROR: ${ex.message}", ex)
+                fileTransferProgressListener.onTransferError("Unknown", ex)
             }
         }
     }
