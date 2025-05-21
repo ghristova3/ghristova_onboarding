@@ -40,7 +40,7 @@ class ChatViewModel(fileDir: String) : ViewModel() {
         }
 
         override fun onFileIncoming(fileName: String, fileSize: Long) {
-            addMessage(ChatMessage.TextMessage("Receiving file: $fileName Size: $fileSize", isIncoming = false))
+            addMessage(ChatMessage.TextMessage("Incoming file: $fileName Size: $fileSize", isIncoming = false))
         }
 
         override fun onFileProgressUpdated(fileName: String, progress: Int) {
@@ -54,7 +54,7 @@ class ChatViewModel(fileDir: String) : ViewModel() {
 
         override fun onFileTransferError(fileName: String, ex: Exception?) {
             _fileTransferProgress.value = null
-            addMessage(ChatMessage.TextMessage("Error receiving file: $fileName $ex", isIncoming = false))
+            addMessage(ChatMessage.TextMessage("Error file transfer: $fileName $ex", isIncoming = false))
         }
     }
 
