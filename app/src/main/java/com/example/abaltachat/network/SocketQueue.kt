@@ -18,6 +18,7 @@ class SocketQueue {
 
     fun sendText(text: String) { textMessages.offer(SocketMessage.Text(text)) }
 
+    @Throws(OutOfMemoryError::class)
     fun sendFileInChunks(file: File, chunkSize: Int) {
         file.inputStream().use { input ->
             val buffer = ByteArray(chunkSize)
@@ -29,7 +30,7 @@ class SocketQueue {
                 if (read == -1) break
 
                 totalRead += read
-                val chunkData = if (read < chunkSize) buffer.copyOf(read) else buffer.clone()
+                val chunkData = buffer.copyOf(read)
                 val isLastChunk = totalRead == fileSize
                 fileChunks.offer(SocketMessage.FileChunk(file.name, chunkData, isLastChunk))
             }

@@ -6,20 +6,21 @@ import com.example.abaltachat.domain.repository.ChatRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.net.BindException
 import java.net.ServerSocket
 import java.net.SocketException
 
 class TcpServer(
     private val onClientConnected: (clientAddress: String) -> Unit,
     private val onMessageReceived: (ChatMessage) -> Unit,
-    private val fileTransferProgressListener: FileTransferProgressListener,
+    private val connectionListener: ConnectionListener,
     private val path: String? = null,
 ) {
     private var serverSocket: ServerSocket? = null
-    private var running = true
     private var serverJob: Job? = null
     private var connectedClient: TcpClient? = null
 
@@ -28,7 +29,7 @@ class TcpServer(
             try {
                 serverSocket = ServerSocket(ChatRepository.PORT)
                 Log.d(TAG, "$LISTENING_ON_PORT: ${ChatRepository.PORT}")
-                while (running) {
+                while (isActive) {
                     val socket = serverSocket?.accept() ?: continue
                     val clientAddress = socket.inetAddress.hostAddress
                     Log.d(TAG, "$CLIENT_CONNECTED: $clientAddress")
@@ -37,7 +38,7 @@ class TcpServer(
                     val tcpClient = TcpClient(
                         socket,
                         onMessageReceived,
-                        fileTransferProgressListener,
+                        connectionListener,
                         path
                     )
                     tcpClient.start(scope)
@@ -45,10 +46,13 @@ class TcpServer(
                 }
             } catch (ex: IOException) {
                 Log.e(TAG, "$SERVER_ERROR: ${ex.message}", ex)
-                fileTransferProgressListener.onTransferError("Unknown", ex)
+                connectionListener.onConnectionError(ex.message)
             } catch (ex: SocketException) {
                 Log.e(TAG, "$SERVER_ERROR: ${ex.message}", ex)
-                fileTransferProgressListener.onTransferError("Unknown", ex)
+                connectionListener.onConnectionError(ex.message)
+            } catch (ex: BindException) {
+                Log.e(TAG, "$SERVER_ERROR: ${ex.message}", ex)
+                connectionListener.onConnectionError(ex.message)
             }
         }
     }
@@ -71,7 +75,6 @@ class TcpServer(
     }
 
     fun stop() {
-        running = false
         serverJob?.cancel()
         try {
             serverSocket?.close()

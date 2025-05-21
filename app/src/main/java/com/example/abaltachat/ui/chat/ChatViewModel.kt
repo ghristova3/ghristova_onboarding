@@ -4,7 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.abaltachat.domain.model.ChatMessage
 import com.example.abaltachat.domain.repository.ChatRepository
-import com.example.abaltachat.network.FileTransferProgressListener
+import com.example.abaltachat.network.ConnectionListener
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,22 +29,30 @@ class ChatViewModel(fileDir: String) : ViewModel() {
     private val _fileTransferProgress = MutableStateFlow<Int?>(null)
     val fileTransferProgress: StateFlow<Int?> = _fileTransferProgress.asStateFlow()
 
-    private val progressListener = object : FileTransferProgressListener {
+    private val progressListener = object : ConnectionListener {
+        override fun onConnectionError(message: String?) {
+            val errorMessage = "Connection failed: $message}"
+            addMessage(ChatMessage.TextMessage(errorMessage, isIncoming = true))
 
-        override fun onReceivingFile(fileName: String, fileSize: Long) {
+            viewModelScope.launch(Dispatchers.Main) {
+                _toastMessage.emit(errorMessage)
+            }
+        }
+
+        override fun onFileIncoming(fileName: String, fileSize: Long) {
             addMessage(ChatMessage.TextMessage("Receiving file: $fileName Size: $fileSize", isIncoming = false))
         }
 
-        override fun onProgressUpdate(progress: Int) {
+        override fun onFileProgressUpdated(fileName: String, progress: Int) {
             _fileTransferProgress.value = progress
         }
 
-        override fun onFileReceived(fileName: String, fileSize: Long) {
+        override fun onFileReceived(file: File) {
             _fileTransferProgress.value = null
-            addMessage(ChatMessage.TextMessage("Completed file: $fileName Size: $fileSize", isIncoming = false))
+            addMessage(ChatMessage.TextMessage("Completed file: ${file.name} Size: ${file.length()}", isIncoming = false))
         }
 
-        override fun onTransferError(fileName: String, ex: Exception) {
+        override fun onFileTransferError(fileName: String, ex: Exception?) {
             _fileTransferProgress.value = null
             addMessage(ChatMessage.TextMessage("Error receiving file: $fileName $ex", isIncoming = false))
         }
@@ -59,7 +68,7 @@ class ChatViewModel(fileDir: String) : ViewModel() {
             addMessage(message)
         },
         scope = viewModelScope,
-        fileTransferProgressListener = progressListener
+        connectionListener = progressListener
     )
 
     init {

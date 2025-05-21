@@ -1,5 +1,6 @@
 package com.example.abaltachat
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.app.ActivityCompat
 import com.example.abaltachat.ui.chat.ChatScreen
 import com.example.abaltachat.ui.chat.ChatViewModel
 import com.example.abaltachat.ui.chat.IpInputScreen
@@ -33,8 +35,8 @@ class ChatActivity : ComponentActivity() {
 
         // TODO Use Store Access framework because of Android 11+
         val fileDir =
-            //Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/"
-            applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + File.separator
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/"
+//            applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath + File.separator
         viewModel = ChatViewModel(fileDir)
 
         Log.d("Path", "Path: ${fileDir}")
@@ -51,7 +53,7 @@ class ChatActivity : ComponentActivity() {
                 ) { padding ->
 
                     if (!isConnected) {
-                        IpInputScreen(padding) { ip ->
+                        IpInputScreen(viewModel, padding) { ip ->
                             viewModel.connectTo(ip)
                         }
                     } else {

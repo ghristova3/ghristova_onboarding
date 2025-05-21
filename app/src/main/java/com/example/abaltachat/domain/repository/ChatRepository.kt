@@ -2,7 +2,7 @@ package com.example.abaltachat.domain.repository
 
 import android.util.Log
 import com.example.abaltachat.domain.model.ChatMessage
-import com.example.abaltachat.network.FileTransferProgressListener
+import com.example.abaltachat.network.ConnectionListener
 import com.example.abaltachat.network.TcpClient
 import com.example.abaltachat.network.TcpServer
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +17,7 @@ class ChatRepository(
     private val onClientConnected: (clientAddress: String) -> Unit,
     private val onMessageReceived: (ChatMessage) -> Unit,
     private val scope: CoroutineScope,
-    private val fileTransferProgressListener: FileTransferProgressListener,
+    private val connectionListener: ConnectionListener,
     private val path: String? = null,
 ) {
     private var server: TcpServer? = null
@@ -27,7 +27,7 @@ class ChatRepository(
         server = TcpServer(
             onClientConnected,
             onMessageReceived,
-            fileTransferProgressListener,
+            connectionListener,
             path
         )
         server?.start(scope)
@@ -40,7 +40,7 @@ class ChatRepository(
                 clientConnection = TcpClient(
                     socket,
                     onMessageReceived,
-                    fileTransferProgressListener,
+                    connectionListener,
                     path
                 ).also {
                     it.start(scope)

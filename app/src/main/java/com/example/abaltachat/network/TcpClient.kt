@@ -2,19 +2,19 @@ package com.example.abaltachat.network
 
 import android.util.Log
 import com.example.abaltachat.domain.model.ChatMessage
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.example.abaltachat.utils.readFullyOrNull
+import kotlinx.coroutines.*
 import java.io.*
 import java.net.Socket
 import java.net.SocketException
+import java.nio.ByteBuffer
+import java.security.MessageDigest
+
 
 class TcpClient(
     private val socket: Socket,
     private val onMessageReceived: (ChatMessage) -> Unit,
-    private val fileTransferProgressListener: FileTransferProgressListener,
+    private val connectionListener: ConnectionListener,
     private val path: String? = null,
 ) {
     private val messagesQueue = SocketQueue()
@@ -23,10 +23,8 @@ class TcpClient(
 
     private val dataInput = DataInputStream(BufferedInputStream(socket.getInputStream()))
     private val dataOutput = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-
-    private var receivingFile: File? = null
-    private var receivingFileSize: Long = 0L
-    private var totalReceived: Long = 0L
+    private val messageDigest: MessageDigest = MessageDigest.getInstance("MD5")
+    private val receivingFiles = mutableMapOf<String, ReceivingFileData>()
 
     fun start(scope: CoroutineScope) {
         coroutineJob = scope.launch(Dispatchers.IO) {
@@ -42,28 +40,26 @@ class TcpClient(
                         }
 
                         CONTROL_FILE_CHUNK -> {
-                            if (receivingFile == null) {
-                                Log.e(TAG, "Received file data without header!")
-                                continue
+                            try {
+                                // TODO Better error handling
+                                val receiveChunk = receiveChunk(dataInput)
+                                Log.d(TAG, "receiveChunk $receiveChunk")
+                                val chunk = receiveChunk ?: continue
+                                appendToFile(chunk.fileName, chunk.data)
+                            } catch (ex: IOException) {
+                                Log.e(TAG, "Checksum failed, request resend|show error: ${ex.message}")
+//                                connectionListener.onFileTransferError(fileName, ex)
+//                                receivingFiles.remove(fileName)
                             }
-
-                            val chunkSize = dataInput.readInt()
-                            val chunk = ByteArray(chunkSize)
-                            dataInput.readFully(chunk)
-                            appendToFile(chunk)
                         }
                     }
-                } catch (ex: EOFException) {
-                    Log.e(TAG, "EOFException error: ${ex.message}", ex)
-                    fileTransferProgressListener.onTransferError("Unknown", ex)
-                    break
                 } catch (ex: IOException) {
                     Log.e(TAG, "Receiving error: ${ex.message}", ex)
-                    fileTransferProgressListener.onTransferError("Unknown", ex)
+                    connectionListener.onFileTransferError("Unknown", ex)
                     break
                 } catch (ex: SocketException) {
                     Log.e(TAG, "SocketException error: ${ex.message}", ex)
-                    fileTransferProgressListener.onTransferError("Unknown", ex)
+                    connectionListener.onConnectionError(ex.message)
                     break
                 }
             }
@@ -75,7 +71,7 @@ class TcpClient(
                     messagesQueue.takeText()?.let { sendText(it.text) }
                 } else if (messagesQueue.hasFileChunk()) {
                     messagesQueue.takeFileChunk()?.let { sendFileChunk(it) }
-                    delay(2)
+                    delay(SENDER_DELAY_MS)
                 }
             }
         }
@@ -96,38 +92,34 @@ class TcpClient(
                 val outputPath = if (path != null) "$path$fileName" else fileName
                 val file = File(outputPath)
 
-                receivingFile = file
-                receivingFileSize = fileSize
-                totalReceived = 0
-
-                fileTransferProgressListener.onReceivingFile(fileName, fileSize)
-
-                Log.d(TAG, "Expecting file: $fileName ($fileSize bytes)")
+                receivingFiles[file.name] = ReceivingFileData(file, fileSize)
+                connectionListener.onFileIncoming(file.name, fileSize)
+                Log.d(TAG, "Incoming file: ${file.name} ($fileSize bytes) exists: ${file.exists()}")
             }
         }
     }
 
-    private fun appendToFile(chunk: ByteArray) {
-        val file = receivingFile ?: return
+    private fun appendToFile(fileName: String, chunk: ByteArray) {
+        val fileInfo = receivingFiles[fileName] ?: return
         try {
-            FileOutputStream(file, true).use { fos ->
+
+            FileOutputStream(fileInfo.file, false).use { fos ->
                 fos.write(chunk)
             }
 
-            totalReceived += chunk.size
-            val progress = ((totalReceived * 100) / receivingFileSize).toInt()
+            fileInfo.totalReceived += chunk.size
+            val progress = ((fileInfo.totalReceived * COMPLETED_FILE_PROGRESS) / fileInfo.size).toInt()
+            connectionListener.onFileProgressUpdated(fileName, progress)
 
-            fileTransferProgressListener.onProgressUpdate(progress)
-
-            if (totalReceived >= receivingFileSize) {
-                fileTransferProgressListener.onFileReceived(file.name, receivingFileSize)
-                receivingFile = null
-                receivingFileSize = 0
-                totalReceived = 0
+            if (fileInfo.totalReceived >= fileInfo.size) {
+                connectionListener.onFileReceived(fileInfo.file)
+                receivingFiles.remove(fileName)
             }
 
         } catch (ex: IOException) {
-            fileTransferProgressListener.onTransferError(file.name, ex)
+            Log.e(TAG, "Error appending file ${ex.message}")
+            connectionListener.onFileTransferError(fileName, ex)
+            receivingFiles.remove(fileName)
         }
     }
 
@@ -137,6 +129,16 @@ class TcpClient(
     }
 
     fun sendFile(file: File) {
+        writeFileHeaderData(file)
+        try {
+            messagesQueue.sendFileInChunks(file, FILE_CHUNK_SIZE)
+        } catch (ex: OutOfMemoryError) {
+            connectionListener.onFileTransferError(file.name + ex
+                .message, IOException())
+        }
+    }
+
+    private fun writeFileHeaderData(file: File) {
         val fileData = "$FILE_HEADER${file.name}:${file.length()}"
         try {
             val bytes = fileData.toByteArray()
@@ -148,7 +150,6 @@ class TcpClient(
         } catch (ex: IOException) {
             Log.e(TAG, "Error sending header: ${ex.message}")
         }
-        messagesQueue.sendFileInChunks(file, FILE_CHUNK_SIZE)
     }
 
     private fun sendText(message: String) {
@@ -166,14 +167,46 @@ class TcpClient(
 
     private fun sendFileChunk(chunk: SocketMessage.FileChunk) {
         try {
+            val fileNameBytes = chunk.fileName.toByteArray(Charsets.UTF_8)
+            val md5 = messageDigest.digest(chunk.data)
+
             dataOutput.writeByte(CONTROL_FILE_CHUNK.toInt())
+            dataOutput.writeInt(fileNameBytes.size)
+            dataOutput.write(fileNameBytes)
             dataOutput.writeInt(chunk.data.size)
+            dataOutput.write(md5)
             dataOutput.write(chunk.data)
             dataOutput.flush()
             Log.d(TAG, "Sent file chunk: ${chunk.fileName}, size: ${chunk.data.size}")
         } catch (ex: IOException) {
             Log.e(TAG, "Error sending file chunk: ${ex.message}")
         }
+    }
+
+    private fun receiveChunk(inputStream: InputStream): ReceivedChunk? {
+        val intBuffer = ByteArray(INT_SIZE)
+        if (inputStream.readFullyOrNull(intBuffer) != INT_SIZE) return null
+        val fileNameLength = ByteBuffer.wrap(intBuffer).int
+
+        val fileNameBytes = ByteArray(fileNameLength)
+        if (inputStream.readFullyOrNull(fileNameBytes) != fileNameLength) return null
+        val fileName = String(fileNameBytes, Charsets.UTF_8)
+
+        if (inputStream.readFullyOrNull(intBuffer) != INT_SIZE) return null
+        val chunkSize = ByteBuffer.wrap(intBuffer).int
+
+        val expectedMd5 = ByteArray(MD5_SIZE)
+        if (inputStream.readFullyOrNull(expectedMd5) != MD5_SIZE) return null
+
+        val chunkData = ByteArray(chunkSize)
+        if (inputStream.readFullyOrNull(chunkData) != chunkSize) return null
+
+        val actualMd5 = messageDigest.digest(chunkData)
+        if (!expectedMd5.contentEquals(actualMd5)) {
+            throw IOException("MD5 checksum mismatch for chunk of $fileName")
+        }
+
+        return ReceivedChunk(fileName, chunkData)
     }
 
     fun stop() {
@@ -183,6 +216,7 @@ class TcpClient(
             dataInput.close()
             dataOutput.close()
             socket.close()
+            receivingFiles.clear()
         } catch (ex: IOException) {
             Log.e(TAG, "Error closing socket: ${ex.message}", ex)
         }
@@ -198,5 +232,9 @@ class TcpClient(
 
         // TODO Bigger file chucks? 10MB
         const val FILE_CHUNK_SIZE = 1024 * 1024
+        const val MD5_SIZE = 16
+        const val INT_SIZE = 4
+        const val SENDER_DELAY_MS = 10L
+        const val COMPLETED_FILE_PROGRESS = 100
     }
 }
