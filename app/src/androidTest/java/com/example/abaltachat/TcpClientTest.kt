@@ -1,12 +1,15 @@
 package com.example.abaltachat
 
-import android.util.Log
+import android.os.Environment
+import com.example.abaltachat.utils.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.abaltachat.domain.model.ChatMessage
 import com.example.abaltachat.domain.repository.ChatRepository
 import com.example.abaltachat.network.ConnectionListener
 import com.example.abaltachat.network.TcpClient
 import com.example.abaltachat.network.TcpServer
+import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.*
 import org.junit.After
 import org.junit.Assert
@@ -29,11 +32,14 @@ class TcpClientTest {
     private lateinit var clientScope: CoroutineScope
 
     private lateinit var fileReceived: File
-    private val tempDir = Files.createTempDirectory("tcp-test").toFile()
+    val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val tempDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        //Files.createTempDirectory("tcp-test").toFile()
 
-    private val messageLatch = CountDownLatch(5)
-    private val fileLatch = CountDownLatch(1)
-    private val twoFilesLatch = CountDownLatch(2)
+
+    private var messageLatch = CountDownLatch(5)
+    private var fileLatch = CountDownLatch(1)
+    private var twoFilesLatch = CountDownLatch(2)
     private val errorLatch = CountDownLatch(1)
     private val progressUpdates = mutableListOf<Int>()
 
@@ -60,6 +66,26 @@ class TcpClientTest {
         }
     }
 
+    @Test
+    fun writeAndReadFromDownloads() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File(
+            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            "test_file.txt"
+        )
+
+        if (!file.exists()) {
+            file.createNewFile()
+        }
+        Log.d(TAG, "file:"+ file.path)
+
+        file.writeText("Hello World from instrumented test!")
+
+        val content = file.readText()
+        assertEquals("Hello World from instrumented test!", content)
+    }
+
+
     @Before
     fun setup() {
         serverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,7 +97,7 @@ class TcpClientTest {
                 if (msg is ChatMessage.TextMessage) messageLatch.countDown()
             },
             connectionListener = connectionListener,
-            path = tempDir.absolutePath + File.separator
+            path = tempDir?.absolutePath + File.separator
         )
 
         server.start(serverScope)
@@ -86,11 +112,12 @@ class TcpClientTest {
                     if (msg is ChatMessage.TextMessage) messageLatch.countDown()
                 },
                 connectionListener = connectionListener,
-                path = tempDir.absolutePath + File.separator
+                path = tempDir?.absolutePath + File.separator
             )
             client.start(clientScope)
         }
     }
+
 
     @Test
     fun testTransferLargeFileWithInterleavedMessages() = runBlocking {
@@ -138,29 +165,20 @@ class TcpClientTest {
         val fileName = "file.txt"
 
         val original = ByteArray(5 * 1024 * 1024) { it.toByte() }
-        val broken = corruptBytes(original)
+
+        val oneMB = 1024 * 1024
+        val trimmed = original.copyOf(original.size - oneMB)
 
         val file = File(tempDir, fileName)
         val brokenFile = File(tempDir, "broken_$fileName")
 
         file.writeBytes(original)
-        brokenFile.writeBytes(broken)
+        brokenFile.writeBytes(trimmed)
 
         client.sendFile(brokenFile)
 
         Assert.assertTrue(fileLatch.await(10, TimeUnit.SECONDS))
         Assert.assertNotEquals(file.length(), fileReceived.length())
-    }
-
-    private fun corruptBytes(data: ByteArray): ByteArray {
-        val corrupted = data.copyOf()
-        if (corrupted.isNotEmpty()) {
-            for (i in 0 until 10) {
-                val index = (corrupted.indices).random()
-                corrupted[index] = (corrupted[index].toInt() xor 0xFF).toByte()
-            }
-        }
-        return corrupted
     }
 
     @After

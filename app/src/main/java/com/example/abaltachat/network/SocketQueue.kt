@@ -1,5 +1,6 @@
 package com.example.abaltachat.network
 
+import com.example.abaltachat.utils.Log
 import java.io.File
 import java.util.Queue
 import java.util.concurrent.ConcurrentLinkedQueue

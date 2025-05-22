@@ -1,6 +1,6 @@
 package com.example.abaltachat.network
 
-import android.util.Log
+import com.example.abaltachat.utils.Log
 import com.example.abaltachat.domain.model.ChatMessage
 import com.example.abaltachat.domain.repository.ChatRepository
 import kotlinx.coroutines.CoroutineScope

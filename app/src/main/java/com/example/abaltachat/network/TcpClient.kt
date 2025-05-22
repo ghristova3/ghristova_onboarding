@@ -1,6 +1,6 @@
 package com.example.abaltachat.network
 
-import android.util.Log
+import com.example.abaltachat.utils.Log
 import com.example.abaltachat.domain.model.ChatMessage
 import com.example.abaltachat.utils.readFullyOrNull
 import kotlinx.coroutines.*
@@ -10,7 +10,6 @@ import java.net.SocketException
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.UUID
-
 
 class TcpClient(
     private val socket: Socket,
@@ -44,22 +43,30 @@ class TcpClient(
                             try {
                                 val (fileId, receiveChunk) = receiveChunk(dataInput)
                                 if (receiveChunk == null) {
-                                    connectionListener.onFileTransferError(fileId, IOException())
+                                    connectionListener.onFileTransferError(
+                                        fileId,
+                                        IOException("MD5 checksum mismatch for fileId $fileId")
+                                    )
                                     receivingFiles.remove(fileId)
                                     continue
-                                }
-                                else {
+                                } else {
                                     appendToFile(receiveChunk.fileId, receiveChunk.data)
                                 }
                             } catch (ex: IOException) {
-                                Log.e(TAG, "Checksum failed, request resend|show error: ${ex.message}")
-                                connectionListener.onFileTransferError("Unknown", ex)
+                                Log.e(
+                                    TAG,
+                                    "Checksum failed, request resend|show error: ${ex.message}"
+                                )
+                                connectionListener.onFileTransferError(
+                                    "Checksum failed, request resend|show error",
+                                    ex
+                                )
                             }
                         }
                     }
                 } catch (ex: IOException) {
                     Log.e(TAG, "Receiving error: ${ex.message}", ex)
-                    connectionListener.onFileTransferError("Unknown", ex)
+                    connectionListener.onFileTransferError("Receiving error:", ex)
                     break
                 } catch (ex: SocketException) {
                     Log.e(TAG, "SocketException error: ${ex.message}", ex)
@@ -89,7 +96,7 @@ class TcpClient(
             }
 
             header.startsWith(FILE_HEADER) -> {
-                // Format: File:<fileId>:<fileName>:<fileSize>
+                // File:<fileId>:<fileName>:<fileSize>
                 val parts = header.removePrefix(FILE_HEADER).split(":")
                 if (parts.size < 3) return
                 val fileId = parts[0]
@@ -105,7 +112,6 @@ class TcpClient(
             }
         }
     }
-
 
     private fun getFileWithUuid(dir: File, originalName: String, fileId: String): File {
         val baseName = originalName.substringBeforeLast('.', originalName)
@@ -123,17 +129,14 @@ class TcpClient(
     private fun appendToFile(fileId: String, chunk: ByteArray) {
         val fileInfo = receivingFiles[fileId] ?: return
         try {
-            if (!fileInfo.file.exists()) {
-                fileInfo.file.parentFile?.mkdirs()
-                fileInfo.file.createNewFile()
-            }
 
             FileOutputStream(fileInfo.file, true).use { fos ->
                 fos.write(chunk)
             }
 
             fileInfo.totalReceived += chunk.size
-            val progress = ((fileInfo.totalReceived * COMPLETED_FILE_PROGRESS) / fileInfo.size).toInt()
+            val progress =
+                ((fileInfo.totalReceived * COMPLETED_FILE_PROGRESS) / fileInfo.size).toInt()
             connectionListener.onFileProgressUpdated(fileInfo.file.name, progress)
 
             if (fileInfo.totalReceived >= fileInfo.size) {
@@ -157,14 +160,21 @@ class TcpClient(
         val fileId = UUID.randomUUID().toString()
         writeFileHeaderData(fileId, file)
         try {
-            messagesQueue.sendFileInChunks(fileId, file, FILE_CHUNK_SIZE)
+            sendFileChunks(fileId, file)
         } catch (ex: OutOfMemoryError) {
-            connectionListener.onFileTransferError(file.name + ex
-                .message, IOException())
+            connectionListener.onFileTransferError(
+                file.name + ex
+                    .message, IOException()
+            )
         }
     }
 
-    private fun writeFileHeaderData(fileId: String, file: File) {
+    // For test purposes. After that fun should be private
+    fun sendFileChunks(fileId: String, file: File) {
+        messagesQueue.sendFileInChunks(fileId, file, FILE_CHUNK_SIZE)
+    }
+
+    fun writeFileHeaderData(fileId: String, file: File) {
         val fileData = "$FILE_HEADER$fileId:${file.name}:${file.length()}"
         try {
             val bytes = fileData.toByteArray()
@@ -217,12 +227,10 @@ class TcpClient(
         val intBuffer = ByteArray(INT_SIZE)
         inputStream.readFullyOrNull(intBuffer)
 
-        // fileId
         val fileIdBytes = ByteArray(ByteBuffer.wrap(intBuffer).int)
         inputStream.readFullyOrNull(fileIdBytes)
         val fileId = String(fileIdBytes, Charsets.UTF_8)
 
-        // chunk size
         if (inputStream.readFullyOrNull(intBuffer) != INT_SIZE) return fileId to null
         val chunkSize = ByteBuffer.wrap(intBuffer).int
 
@@ -233,10 +241,7 @@ class TcpClient(
         if (inputStream.readFullyOrNull(chunkData) != chunkSize) return fileId to null
 
         val actualMd5 = messageDigest.digest(chunkData)
-        if (!expectedMd5.contentEquals(actualMd5)) {
-            fileId to null
-//            throw IOException("MD5 checksum mismatch for fileId $fileId")
-        }
+        if (!expectedMd5.contentEquals(actualMd5)) fileId to null
 
         return fileId to ReceivedChunk(fileId, chunkData)
     }
@@ -262,7 +267,8 @@ class TcpClient(
         const val TEXT_HEADER = "Text:"
         const val FILE_HEADER = "File:"
 
-        const val FILE_CHUNK_SIZE = 64 * 1024
+        // Smaller chunks 64, 256 KB
+        const val FILE_CHUNK_SIZE = 1024 * 1024
         const val MD5_SIZE = 16
         const val INT_SIZE = 4
         const val SENDER_DELAY_MS = 20L
